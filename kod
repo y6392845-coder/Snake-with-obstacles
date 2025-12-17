@@ -1,0 +1,360 @@
+import tkinter as tk
+import random
+
+
+class SnakeGame:
+    def __init__(self, root):
+        self.okno = root  # Главное окно игры
+        self.okno.title("Змейка с препятствиями")
+        self.okno.resizable(False, False)  # Запрещаем менять размер окна
+
+        # Настройки игры - здесь можно менять параметры
+        self.razmer_kletki = 20  # Размер одной клетки в пикселях
+        self.shirina_polya = 25  # Ширина поля в клетках
+        self.visota_polya = 25  # Высота поля в клетках
+        self.skorost = 150  # Начальная скорость (меньше = быстрее)
+
+        # Вычисляем размеры окна исходя из размеров поля
+        self.shirina_okna = self.shirina_polya * self.razmer_kletki
+        self.visota_okna = self.visota_polya * self.razmer_kletki
+
+        # Создаем холст для рисования - это наше игровое поле
+        self.pole = tk.Canvas(
+            self.okno,
+            width=self.shirina_okna,
+            height=self.visota_okna,
+            bg="black"  # Черный фон
+        )
+        self.pole.pack()
+
+        # Метка для отображения счета и уровня
+        self.nadpis_schet = tk.Label(
+            self.okno,
+            text="Счет: 0  Уровень: 1",
+            font=("Arial", 12),
+            bg="black",
+            fg="white"
+        )
+        self.nadpis_schet.pack()
+
+        # Кнопка для начала новой игры
+        self.knopka_novaya_igra = tk.Button(
+            self.okno,
+            text="Новая игра",
+            command=self.nachat_igru,  # При нажатии вызовется эта функция
+            font=("Arial", 12)
+        )
+        self.knopka_novaya_igra.pack(pady=5)
+
+        # Подсказка по управлению
+        self.instrukcia = tk.Label(
+            self.okno,
+            text="Управление: Стрелки или WASD | Пробел: пауза | R: новая игра",
+            font=("Arial", 9),
+            bg="black",
+            fg="gray"
+        )
+        self.instrukcia.pack()
+
+        # Фокус на окно, чтобы оно ловило нажатия клавиш
+        self.okno.focus_set()
+
+        # Привязываем обработчики нажатий клавиш
+        self.okno.bind("<KeyPress>", self.najatie_klavishi)
+        self.okno.bind("<Key>", self.najatie_klavishi)
+
+        # Запускаем игру
+        self.nachat_igru()
+
+    def nachat_igru(self):
+        """Начинает новую игру"""
+        # Очищаем поле от предыдущей игры
+        self.pole.delete("all")
+
+        # Начальная позиция змейки - в центре поля
+        nachalo_x = self.shirina_polya // 2  # // - целочисленное деление
+        nachalo_y = self.visota_polya // 2
+        # Змейка - список координат сегментов
+        self.zmeika = [
+            (nachalo_x, nachalo_y),      # Голова
+            (nachalo_x - 1, nachalo_y),  # Первый сегмент тела
+            (nachalo_x - 2, nachalo_y)   # Второй сегмент тела
+        ]
+
+        # Направления движения
+        self.napravlenie = "RIGHT"
+        self.sled_napravlenie = "RIGHT"  # Следующее направление
+
+        # Игровые параметры
+        self.schet = 0  # Начальный счет
+        self.uroven = 1  # Начальный уровень
+
+        # Флаги состояния игры
+        self.igra_konchena = False  # Игра завершена?
+        self.na_pauze = False       # Игра на паузе?
+
+        # Создаем препятствия для текущего уровня
+        self.prepyatstviya = []  # Список координат препятствий
+        self.sozdat_prepyatstviya()
+
+        # Создаем первую еду
+        self.eda = self.sozdat_edu()
+
+        # Отрисовываем все объекты на поле
+        self.narisovat_prepyatstviya()
+        self.narisovat_zmeiku()
+        self.narisovat_edu()
+
+        # Обновляем надпись со счетом
+        self.obnovit_nadpis()
+
+        # Запускаем игровой цикл
+        self.igrovoy_cikl()
+
+    def sozdat_prepyatstviya(self):
+        """Создает препятствия на поле"""
+        self.prepyatstviya = []  # Очищаем старые препятствия
+        
+        # Чем выше уровень, тем больше препятствий
+        kolichestvo = min(5 + self.uroven * 2, 20)  # Но не больше 20
+
+        # Создаем каждое препятствие
+        for _ in range(kolichestvo):
+            while True:  # Ищем свободное место
+                x = random.randint(2, self.shirina_polya - 3)  # Случайные координаты
+                y = random.randint(2, self.visota_polya - 3)
+
+                # Проверяем, чтобы не было на змейке
+                if (x, y) not in self.zmeika:
+                    self.prepyatstviya.append((x, y))
+                    break  # Выходим из цикла while
+
+    def sozdat_edu(self):
+        """Создает еду в случайном месте"""
+        while True:  # Ищем подходящее место
+            x = random.randint(0, self.shirina_polya - 1)
+            y = random.randint(0, self.visota_polya - 1)
+
+            # Проверяем условия:
+            uslovie1 = (x, y) not in self.zmeika        # Не на змейке
+            uslovie2 = (x, y) not in self.prepyatstviya # Не на препятствии
+
+            if uslovie1 and uslovie2:
+                return (x, y)  # Возвращаем координаты еды
+
+    def narisovat_prepyatstviya(self):
+        """Рисует препятствия"""
+        self.pole.delete("prepyatstvie")  # Удаляем старые препятствия
+        
+        for x, y in self.prepyatstviya:
+            # Рисуем квадратик - препятствие
+            self.pole.create_rectangle(
+                x * self.razmer_kletki,  # Левая граница
+                y * self.razmer_kletki,  # Верхняя граница
+                (x + 1) * self.razmer_kletki,  # Правая граница
+                (y + 1) * self.razmer_kletki,  # Нижняя граница
+                fill="gray",           # Цвет заливки
+                outline="darkgray",    # Цвет границы
+                tags="prepyatstvie"    # Тег для группового удаления
+            )
+
+    def narisovat_zmeiku(self):
+        """Рисует змейку на поле"""
+        self.pole.delete("zmeika")  # Удаляем старую змейку
+
+        for i, (x, y) in enumerate(self.zmeika):  # enumerate дает индекс и значение
+            # Голова зеленого цвета
+            if i == 0:
+                cvet = "#4CAF50"  # Зеленый для головы
+            # Тело темно-зеленого
+            else:
+                cvet = "#2E7D32"  # Темно-зеленый для тела
+
+            # Рисуем сегмент змейки
+            self.pole.create_rectangle(
+                x * self.razmer_kletki,
+                y * self.razmer_kletki,
+                (x + 1) * self.razmer_kletki,
+                (y + 1) * self.razmer_kletki,
+                fill=cvet,
+                outline="#1B5E20",
+                tags="zmeika"  # Тег для группового удаления
+            )
+
+    def narisovat_edu(self):
+        """Рисует еду"""
+        self.pole.delete("eda")  # Удаляем старую еду
+        x, y = self.eda  # Распаковываем координаты
+
+        # Рисуем еду в виде круга
+        self.pole.create_oval(
+            x * self.razmer_kletki,
+            y * self.razmer_kletki,
+            (x + 1) * self.razmer_kletki,
+            (y + 1) * self.razmer_kletki,
+            fill="#FF5252",    # Красный цвет
+            outline="#D32F2F",  # Темно-красная граница
+            tags="eda"          # Тег для удаления
+        )
+
+    def obnovit_nadpis(self):
+        """Обновляет текст счета"""
+        # Обновляем текст метки
+        self.nadpis_schet.config(
+            text=f"Счет: {self.schet}  Уровень: {self.uroven}"
+        )
+
+    def proverit_uroven(self):
+        """Проверяет, нужно ли повысить уровень"""
+        # Каждые 50 очков - новый уровень
+        if self.schet >= self.uroven * 50:
+            self.uroven += 1  # Повышаем уровень
+
+            # Добавляем новые препятствия
+            self.sozdat_prepyatstviya()
+            self.narisovat_prepyatstviya()
+
+    def najatie_klavishi(self, event):
+        """Обрабатывает нажатия клавиш"""
+        klavisha = event.keysym.upper()  # Приводим к верхнему регистру
+
+        # Фокусируем окно для обработки клавиш
+        self.okno.focus_set()
+
+        # Обработка движения (с проверкой, чтобы не пойти в обратном направлении)
+        if klavisha in ['UP', 'W'] and self.napravlenie != "DOWN":
+            self.sled_napravlenie = "UP"
+        elif klavisha in ['DOWN', 'S'] and self.napravlenie != "UP":
+            self.sled_napravlenie = "DOWN"
+        elif klavisha in ['LEFT', 'A'] and self.napravlenie != "RIGHT":
+            self.sled_napravlenie = "LEFT"
+        elif klavisha in ['RIGHT', 'D'] and self.napravlenie != "LEFT":
+            self.sled_napravlenie = "RIGHT"
+        # Пауза
+        elif klavisha == 'SPACE':
+            self.na_pauze = not self.na_pauze  # Переключаем паузу
+        # Новая игра
+        elif klavisha == 'R':
+            self.nachat_igru()
+
+    def dvizhenie_zmeiki(self):
+        """Двигает змейку"""
+        # Обновляем текущее направление
+        self.napravlenie = self.sled_napravlenie
+
+        # Получаем координаты головы
+        golova_x, golova_y = self.zmeika[0]
+
+        # Вычисляем новую позицию головы в зависимости от направления
+        if self.napravlenie == "UP":
+            novaya_golova = (golova_x, golova_y - 1)
+        elif self.napravlenie == "DOWN":
+            novaya_golova = (golova_x, golova_y + 1)
+        elif self.napravlenie == "LEFT":
+            novaya_golova = (golova_x - 1, golova_y)
+        elif self.napravlenie == "RIGHT":
+            novaya_golova = (golova_x + 1, golova_y)
+
+        # Проверяем столкновение со стенами
+        if (novaya_golova[0] < 0 or novaya_golova[0] >= self.shirina_polya or
+                novaya_golova[1] < 0 or novaya_golova[1] >= self.visota_polya):
+            self.igra_konchena = True  # Конец игры
+            return
+
+        # Проверяем столкновение с собой
+        if novaya_golova in self.zmeika:
+            self.igra_konchena = True
+            return
+
+        # Проверяем столкновение с препятствием
+        if novaya_golova in self.prepyatstviya:
+            self.igra_konchena = True
+            return
+
+        # Добавляем новую голову
+        self.zmeika.insert(0, novaya_golova)
+
+        # Проверяем, съели ли еду
+        if novaya_golova == self.eda:
+            self.schet += 10  # Увеличиваем счет
+            self.eda = self.sozdat_edu()  # Создаем новую еду
+            self.proverit_uroven()  # Проверяем уровень
+        else:
+            # Если не съели еду, убираем хвост
+            self.zmeika.pop()
+
+        # Обновляем надпись со счетом
+        self.obnovit_nadpis()
+
+    def narisovat_konec_igri(self):
+        """Рисует экран конца игры"""
+        # Полупрозрачное наложение
+        self.pole.create_rectangle(
+            0, 0, self.shirina_okna, self.visota_okna,
+            fill="black",
+            stipple="gray50"  # Создает эффект полупрозрачности
+        )
+
+        # Текст "ИГРА ОКОНЧЕНА!"
+        self.pole.create_text(
+            self.shirina_okna // 2,  # Центр по горизонтали
+            self.visota_okna // 2 - 30,  # Сдвиг вверх от центра
+            text="ИГРА ОКОНЧЕНА!",
+            font=("Arial", 24, "bold"),
+            fill="red"
+        )
+
+        # Итоговый счет
+        self.pole.create_text(
+            self.shirina_okna // 2,
+            self.visota_okna // 2 + 10,
+            text=f"Счет: {self.schet}",
+            font=("Arial", 18),
+            fill="white"
+        )
+
+        # Достигнутый уровень
+        self.pole.create_text(
+            self.shirina_okna // 2,
+            self.visota_okna // 2 + 40,
+            text=f"Уровень: {self.uroven}",
+            font=("Arial", 16),
+            fill="#2196F3"  # Синий цвет
+        )
+
+        # Инструкция для продолжения
+        self.pole.create_text(
+            self.shirina_okna // 2,
+            self.visota_okna // 2 + 70,
+            text="Нажмите R для новой игры",
+            font=("Arial", 12),
+            fill="gray"
+        )
+
+    def igrovoy_cikl(self):
+        """Главный игровой цикл"""
+        if not self.igra_konchena and not self.na_pauze:
+            self.dvizhenie_zmeiki()  # Двигаем змейку
+
+            if not self.igra_konchena:
+                # Рисуем обновленное состояние
+                self.narisovat_zmeiku()
+                self.narisovat_edu()
+            else:
+                # Рисуем экран конца игры
+                self.narisovat_konec_igri()
+
+        # Продолжаем цикл, если игра не закончена
+        if not self.igra_konchena:
+            # after - вызывает функцию через указанное время (в миллисекундах)
+            self.okno.after(self.skorost, self.igrovoy_cikl)
+
+
+def main():
+    okno = tk.Tk()  # Создаем главное окно
+    igra = SnakeGame(okno)  # Создаем игру
+    okno.mainloop()  # Запускаем главный цикл обработки событий
+
+
+if __name__ == "__main__":
+    main()  # Запускаем программу
